@@ -1,4 +1,4 @@
-namespace Osnovnoi_proekt //текстовое изменение
+namespace Osnovnoi_proekt 
 {
     public partial class Form1 : Form
     {
