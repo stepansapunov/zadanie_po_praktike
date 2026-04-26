@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using System.Drawing;
 using ScottPlot;
+using System.Numerics; 
 using Color = System.Drawing.Color;
 
 namespace Osnovnoi_proekt;
@@ -31,11 +32,10 @@ public partial class Form1 : Form
 
             if (File.Exists(datPath))
             {
-                // Сохраняем запись в переменную класса
+                // 1. Сохраняем запись в переменную класса
                 currentRecord = Chtenie_COMTRADE.Prochitat(cfgPath, datPath);
 
-                // --- НОВОЕ: Заполняем список выбора сигналов ---
-                // Заполняем CheckedListBox красивыми названиями
+                // 2. Заполняем список выбора сигналов
                 clbSignals.Items.Clear();
                 for (int i = 0; i < currentRecord.Kanaly.Count; i++)
                 {
@@ -43,9 +43,8 @@ public partial class Form1 : Form
                     string krasivoeImya = PoluchitPonyatnoeImya(i, k.Nazvanie);
                     clbSignals.Items.Add($"{i + 1}: {krasivoeImya} [{k.Edinicy}]");
                 }
-                // -----------------------------------------------
 
-                // Твой старый код вычета пиков (оставляем для инфы в txtInfo)
+                // 3. Отчет по пиковым значениям в текстовое поле
                 txtInfo.Clear();
                 txtInfo.AppendText($"=== ОТЧЕТ ПО ФАЙЛУ: {Path.GetFileName(cfgPath)} ===\r\n\r\n");
                 txtInfo.AppendText("РЕЗУЛЬТАТЫ АНАЛИЗА (Пиковые значения):\r\n");
@@ -60,12 +59,19 @@ public partial class Form1 : Form
                     txtInfo.AppendText($"Фаза {fazy[j]}: {maxTok,8:F2} Ампер\r\n");
                 }
 
-                // Очищаем график (ждем, пока пользователь сам выберет сигналы)
+                // 4. Очищаем основной график
                 formsPlot1.Plot.Clear();
                 formsPlot1.Refresh();
+
+                // --- ВОТ СЮДА ВСТАВЛЯЕМ! ---
+                // Теперь, когда данные загружены, считаем симметричные составляющие
+                // Результат появится на второй вкладке (Анализ ТКЗ)
+                VychislitSimmetrichnye();
+                // ---------------------------
             }
         }
     }
+    
 
     // НОВОЕ: Событие, которое срабатывает при клике на галочку
     private void clbSignals_ItemCheck(object sender, ItemCheckEventArgs e)
@@ -178,5 +184,80 @@ public partial class Form1 : Form
     private void formsPlot1_Load(object sender, EventArgs e)
     {
 
+    }
+    private void VychislitSimmetrichnye()
+    {
+        if (currentRecord == null || currentRecord.Dannye.Count < 200) return;
+
+        // 1. Параметры: 50 Гц, шаг времени из файла
+        int pointsPerPeriod = (int)(1.0 / (50 * currentRecord.ShagVremeni));
+        int totalPoints = currentRecord.Dannye.Count;
+
+        // Массивы для хранения результатов (модули векторов)
+        double[] i1_mag = new double[totalPoints - pointsPerPeriod];
+        double[] i2_mag = new double[totalPoints - pointsPerPeriod];
+        double[] i0_mag = new double[totalPoints - pointsPerPeriod];
+        double[] timeAxis = new double[totalPoints - pointsPerPeriod];
+
+        // Индексы фазных токов (7, 8, 9 каналы -> индексы 6, 7, 8)
+        int idxA = 6, idxB = 7, idxC = 8;
+
+        // 2. Цикл скользящего окна
+        for (int i = 0; i < totalPoints - pointsPerPeriod; i++)
+        {
+            // Выделяем массивы для Фурье
+            double[] sliceA = currentRecord.Dannye.Select(row => row[idxA]).Skip(i).Take(pointsPerPeriod).ToArray();
+            double[] sliceB = currentRecord.Dannye.Select(row => row[idxB]).Skip(i).Take(pointsPerPeriod).ToArray();
+            double[] sliceC = currentRecord.Dannye.Select(row => row[idxC]).Skip(i).Take(pointsPerPeriod).ToArray();
+
+            // Получаем комплексные фазоры (используем наш класс Vychisleniya_RZA)
+            var fA = Vychisleniya_RZA.Garmonika(sliceA, 0, pointsPerPeriod);
+            var fB = Vychisleniya_RZA.Garmonika(sliceB, 0, pointsPerPeriod);
+            var fC = Vychisleniya_RZA.Garmonika(sliceC, 0, pointsPerPeriod);
+
+            // Считаем последовательности
+            var (i0, i1, i2) = Vychisleniya_RZA.Simmetrichnye(fA, fB, fC);
+
+            // Записываем действующие значения (Magnitude / sqrt(2))
+            i1_mag[i] = i1.Magnitude / Math.Sqrt(2);
+            i2_mag[i] = i2.Magnitude / Math.Sqrt(2);
+            i0_mag[i] = i0.Magnitude / Math.Sqrt(2);
+
+            timeAxis[i] = i * currentRecord.ShagVremeni;
+        }
+
+        // 3. Отрисовка на втором графике
+        OtrisovatAnaliz(timeAxis, i1_mag, i2_mag, i0_mag);
+    }
+    private void OtrisovatAnaliz(double[] time, double[] i1, double[] i2, double[] i0)
+    {
+        formsPlotAnalysis.Plot.Clear();
+
+        // Прямая последовательность - обычно красная
+        var sig1 = formsPlotAnalysis.Plot.Add.Signal(i1);
+        sig1.Data.Period = currentRecord.ShagVremeni;
+        sig1.LegendText = "I1 (Прямая)";
+        sig1.Color = ScottPlot.Color.FromColor(System.Drawing.Color.Red);
+
+        // Обратная - синяя
+        var sig2 = formsPlotAnalysis.Plot.Add.Signal(i2);
+        sig2.Data.Period = currentRecord.ShagVremeni;
+        sig2.LegendText = "I2 (Обратная)";
+        sig2.Color = ScottPlot.Color.FromColor(System.Drawing.Color.Blue);
+
+        // Нулевая - зеленая или черная
+        var sig0 = formsPlotAnalysis.Plot.Add.Signal(i0);
+        sig0.Data.Period = currentRecord.ShagVremeni;
+        sig0.LegendText = "I0 (Нулевая)";
+        sig0.Color = ScottPlot.Color.FromColor(System.Drawing.Color.Green);
+
+        // Настройка осей
+        formsPlotAnalysis.Plot.Title("Симметричные составляющие тока");
+        formsPlotAnalysis.Plot.XLabel("Время, сек");
+        formsPlotAnalysis.Plot.YLabel("Действующее значение, А");
+        formsPlotAnalysis.Plot.Legend.IsVisible = true;
+
+        formsPlotAnalysis.Plot.Axes.AutoScale();
+        formsPlotAnalysis.Refresh();
     }
 }

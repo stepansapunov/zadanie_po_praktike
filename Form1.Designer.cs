@@ -38,6 +38,7 @@
             tabPage2 = new TabPage();
             tabPage3 = new TabPage();
             txtInfo = new TextBox();
+            formsPlotAnalysis = new ScottPlot.WinForms.FormsPlot();
             tabControl1.SuspendLayout();
             tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)splitContainer1).BeginInit();
@@ -45,6 +46,7 @@
             splitContainer1.Panel2.SuspendLayout();
             splitContainer1.SuspendLayout();
             panel1.SuspendLayout();
+            tabPage2.SuspendLayout();
             tabPage3.SuspendLayout();
             SuspendLayout();
             // 
@@ -128,6 +130,7 @@
             // 
             // tabPage2
             // 
+            tabPage2.Controls.Add(formsPlotAnalysis);
             tabPage2.Location = new Point(4, 34);
             tabPage2.Name = "tabPage2";
             tabPage2.Padding = new Padding(3);
@@ -156,6 +159,13 @@
             txtInfo.Size = new Size(2395, 1082);
             txtInfo.TabIndex = 2;
             // 
+            // formsPlotAnalysis
+            // 
+            formsPlotAnalysis.Location = new Point(434, 168);
+            formsPlotAnalysis.Name = "formsPlotAnalysis";
+            formsPlotAnalysis.Size = new Size(1195, 547);
+            formsPlotAnalysis.TabIndex = 0;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(10F, 25F);
@@ -172,6 +182,7 @@
             ((System.ComponentModel.ISupportInitialize)splitContainer1).EndInit();
             splitContainer1.ResumeLayout(false);
             panel1.ResumeLayout(false);
+            tabPage2.ResumeLayout(false);
             tabPage3.ResumeLayout(false);
             tabPage3.PerformLayout();
             ResumeLayout(false);
@@ -189,5 +200,6 @@
         private TextBox txtInfo;
         private CheckedListBox clbSignals;
         private Panel panel1;
+        private ScottPlot.WinForms.FormsPlot formsPlotAnalysis;
     }
 }
