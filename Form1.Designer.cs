@@ -28,31 +28,44 @@
         /// </summary>
         private void InitializeComponent()
         {
-            button1 = new Button();
+            btnOpen = new Button();
+            txtInfo = new TextBox();
             SuspendLayout();
             // 
-            // button1
+            // btnOpen
             // 
-            button1.Location = new Point(545, 331);
-            button1.Name = "button1";
-            button1.Size = new Size(112, 34);
-            button1.TabIndex = 0;
-            button1.Text = "button1";
-            button1.UseVisualStyleBackColor = true;
+            btnOpen.Location = new Point(340, 79);
+            btnOpen.Name = "btnOpen";
+            btnOpen.Size = new Size(259, 34);
+            btnOpen.TabIndex = 0;
+            btnOpen.Text = "Открыть файл COMTRADE";
+            btnOpen.UseVisualStyleBackColor = true;
+            btnOpen.Click += btnOpen_Click_1;
+            // 
+            // txtInfo
+            // 
+            txtInfo.Location = new Point(67, 207);
+            txtInfo.Multiline = true;
+            txtInfo.Name = "txtInfo";
+            txtInfo.Size = new Size(803, 486);
+            txtInfo.TabIndex = 1;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(10F, 25F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(800, 450);
-            Controls.Add(button1);
+            ClientSize = new Size(1033, 792);
+            Controls.Add(txtInfo);
+            Controls.Add(btnOpen);
             Name = "Form1";
             Text = "Form1";
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
 
-        private Button button1;
+        private Button btnOpen;
+        private TextBox txtInfo;
     }
 }
