@@ -1,31 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace Osnovnoi_proekt
+namespace Osnovnoi_proekt;
+
+// Класс для одного канала (одна строка в CFG)
+public class Kanal_COMTRADE
 {
-    
-    public class AnalogovyiKanal
-    {
-        public int Nomer { get; set; }           
-        public string Nazvanie { get; set; }    
-        public string Faza { get; set; }        
-        public string Edinicy { get; set; }     = string.Empty;
-        public double Koeff_A { get; set; }     
-        public double Koeff_B { get; set; }     
+    public int Nomer { get; set; }
+    public string Nazvanie { get; set; } = string.Empty;
+    public string Faza { get; set; } = string.Empty;
+    public string Edinicy { get; set; } = string.Empty;
+    public double Koeff_A { get; set; }
+    public double Koeff_B { get; set; }
 
-        
-        public double Preobrazovat(double syroeZnachenie)
-        {
-            
-            return Koeff_A * syroeZnachenie + Koeff_B;
-        }
-    }
-
-    
-    public class Zapis_COMTRADE
+    // Метод для пересчета "сырого" значения в реальное (Амперы/Вольты)
+    public double Preobrazovat(double syroeZnachenie)
     {
-        public List<AnalogovyiKanal> Kanaly { get; set; } = new List<AnalogovyiKanal>();
-        public List<double[]> Dannye { get; set; } = new List<double[]>(); 
-        public double Chastota { get; set; }  
+        return Koeff_A * syroeZnachenie + Koeff_B;
     }
+}
+
+// Класс для всей осциллограммы
+public class Zapis_COMTRADE
+{
+    public List<Kanal_COMTRADE> Kanaly { get; set; } = new();
+    public List<double[]> Dannye { get; set; } = new();
+
+    // Тот самый шаг времени для плавности графиков
+    public double ShagVremeni { get; set; } = 0.001;
 }
