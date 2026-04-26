@@ -30,13 +30,14 @@
         {
             btnOpen = new Button();
             txtInfo = new TextBox();
+            formsPlot1 = new ScottPlot.WinForms.FormsPlot();
             SuspendLayout();
             // 
             // btnOpen
             // 
-            btnOpen.Location = new Point(340, 79);
+            btnOpen.Location = new Point(129, 154);
             btnOpen.Name = "btnOpen";
-            btnOpen.Size = new Size(259, 34);
+            btnOpen.Size = new Size(276, 33);
             btnOpen.TabIndex = 0;
             btnOpen.Text = "Открыть файл COMTRADE";
             btnOpen.UseVisualStyleBackColor = true;
@@ -44,17 +45,25 @@
             // 
             // txtInfo
             // 
-            txtInfo.Location = new Point(67, 207);
+            txtInfo.Location = new Point(670, 109);
             txtInfo.Multiline = true;
             txtInfo.Name = "txtInfo";
-            txtInfo.Size = new Size(803, 486);
+            txtInfo.Size = new Size(559, 585);
             txtInfo.TabIndex = 1;
+            // 
+            // formsPlot1
+            // 
+            formsPlot1.Location = new Point(1342, 170);
+            formsPlot1.Name = "formsPlot1";
+            formsPlot1.Size = new Size(1007, 490);
+            formsPlot1.TabIndex = 2;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(10F, 25F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1033, 792);
+            ClientSize = new Size(2396, 822);
+            Controls.Add(formsPlot1);
             Controls.Add(txtInfo);
             Controls.Add(btnOpen);
             Name = "Form1";
@@ -67,5 +76,6 @@
 
         private Button btnOpen;
         private TextBox txtInfo;
+        private ScottPlot.WinForms.FormsPlot formsPlot1;
     }
 }
