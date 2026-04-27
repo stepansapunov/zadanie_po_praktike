@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Osnovnoi_proekt;
 
-// Класс для одного канала (одна строка в CFG)
+// 1. Описание одного канала (остается без изменений)
 public class Kanal_COMTRADE
 {
     public int Nomer { get; set; }
@@ -20,12 +20,15 @@ public class Kanal_COMTRADE
     }
 }
 
-// Класс для всей осциллограммы
-public class Zapis_COMTRADE
+// 2. Модель всей осциллограммы (ПЕРЕИМЕНОВАЛИ В Model_COMTRADE)
+public class Model_COMTRADE
 {
+    // Добавим название станции, оно нам пригодится для отчета
+    public string NazvanieStancii { get; set; } = string.Empty;
+
     public List<Kanal_COMTRADE> Kanaly { get; set; } = new();
     public List<double[]> Dannye { get; set; } = new();
 
-    // Тот самый шаг времени для плавности графиков
+    // Шаг времени (1 делить на частоту дискретизации)
     public double ShagVremeni { get; set; } = 0.001;
 }

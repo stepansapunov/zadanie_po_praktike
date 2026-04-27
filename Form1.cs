@@ -2,21 +2,20 @@ using System.IO;
 using System.Linq;
 using System.Drawing;
 using ScottPlot;
-using System.Numerics; 
+using System.Numerics;
 using Color = System.Drawing.Color;
 
 namespace Osnovnoi_proekt;
 
 public partial class Form1 : Form
 {
-    // НОВОЕ: Переменная для хранения текущей записи (чтобы обращаться к ней из разных мест)
-    private Zapis_COMTRADE currentRecord;
+    // Переменная для хранения текущей записи
+    private Model_COMTRADE? currentRecord;
 
     public Form1()
     {
         InitializeComponent();
-
-        // НОВОЕ: Подписываемся на событие изменения галочки
+        // Подписываемся на событие изменения галочки
         clbSignals.ItemCheck += clbSignals_ItemCheck;
     }
 
@@ -32,58 +31,94 @@ public partial class Form1 : Form
 
             if (File.Exists(datPath))
             {
-                // 1. Сохраняем запись в переменную класса
+                // 1. Загружаем данные
                 currentRecord = Chtenie_COMTRADE.Prochitat(cfgPath, datPath);
 
-                // 2. Заполняем список выбора сигналов
+                // 2. Обновляем список сигналов (левая панель)
                 clbSignals.Items.Clear();
                 for (int i = 0; i < currentRecord.Kanaly.Count; i++)
                 {
                     var k = currentRecord.Kanaly[i];
-                    string krasivoeImya = PoluchitPonyatnoeImya(i, k.Nazvanie);
+                    string krasivoeImya = PoluchitPonyatnoeImya(k.Nazvanie, k.Edinicy);
                     clbSignals.Items.Add($"{i + 1}: {krasivoeImya} [{k.Edinicy}]");
                 }
 
-                // 3. Отчет по пиковым значениям в текстовое поле
-                txtInfo.Clear();
-                txtInfo.AppendText($"=== ОТЧЕТ ПО ФАЙЛУ: {Path.GetFileName(cfgPath)} ===\r\n\r\n");
-                txtInfo.AppendText("РЕЗУЛЬТАТЫ АНАЛИЗА (Пиковые значения):\r\n");
-
-                int[] tokiIdx = { 6, 7, 8 };
-                char[] fazy = { 'A', 'B', 'C' };
-
-                for (int j = 0; j < tokiIdx.Length; j++)
+                // 3. ДИНАМИЧЕСКИЙ ПОИСК КАНАЛОВ ТОКА
+                // Ищем все каналы, где в названии есть "I", "Ток" или "Cur"
+                List<int> tokiIdx = new List<int>();
+                for (int i = 0; i < currentRecord.Kanaly.Count; i++)
                 {
-                    int idx = tokiIdx[j];
-                    double maxTok = currentRecord.Dannye.Max(row => Math.Abs(row[idx]));
-                    txtInfo.AppendText($"Фаза {fazy[j]}: {maxTok,8:F2} Ампер\r\n");
+                    var k = currentRecord.Kanaly[i];
+                    string name = k.Nazvanie.ToUpper();
+                    string unit = k.Edinicy.ToUpper();
+
+                    // Ищем токи по трем признакам:
+                    // 1. В названии есть I (латинская) или ТОК
+                    // 2. В единицах измерения есть A (латинская) или А (русская)
+                    if (name.Contains("I") || name.Contains("ТОК") || name.Contains("CUR") ||
+                        unit == "A" || unit == "А" || unit.Contains("[A]"))
+                    {
+                        tokiIdx.Add(i);
+                    }
                 }
 
-                // 4. Очищаем основной график
+                // 4. ЗАПОЛНЯЕМ ВКЛАДКУ "ОТЧЕТ"
+                txtInfo.Clear();
+                txtInfo.AppendText($"=== ОТЧЕТ ПО ФАЙЛУ: {Path.GetFileName(cfgPath)} ===\r\n\r\n");
+
+                if (tokiIdx.Count > 0)
+                {
+                    // Считаем ударный ток (абсолютный максимум по всем найденным фазам)
+                    double maxUdarnyi = currentRecord.Dannye.Max(row =>
+                    {
+                        double rowMax = 0;
+                        foreach (int idx in tokiIdx)
+                        {
+                            if (idx < row.Length)
+                                rowMax = Math.Max(rowMax, Math.Abs(row[idx]));
+                        }
+                        return rowMax;
+                    });
+
+                    txtInfo.AppendText($"УДАРНЫЙ ТОК КЗ (i_уд): {maxUdarnyi:F2} А\r\n");
+                    txtInfo.AppendText("------------------------------------------\r\n");
+                    txtInfo.AppendText("ПИКОВЫЕ ЗНАЧЕНИЯ ПО НАЙДЕННЫМ ФАЗАМ:\r\n");
+
+                    // Выводим пики по каждому найденному каналу тока
+                    foreach (int idx in tokiIdx)
+                    {
+                        var k = currentRecord.Kanaly[idx];
+
+                        // Используем ту же функцию для красоты, что и в списке сигналов
+                        string krasivoeImya = PoluchitPonyatnoeImya(k.Nazvanie, k.Edinicy);
+
+                        double maxFaza = currentRecord.Dannye.Max(row => Math.Abs(row[idx]));
+
+                        // Выводим в отчет уже "понятное" имя
+                        txtInfo.AppendText($"{krasivoeImya}: {maxFaza,10:F2} {k.Edinicy}\r\n");
+                    }
+                }
+                else
+                {
+                    txtInfo.AppendText("ВНИМАНИЕ: Каналы тока для расчета не определены.\r\n");
+                    txtInfo.AppendText("Проверьте названия сигналов в файле.\r\n");
+                }
+
+                // 5. ГРАФИКИ
                 formsPlot1.Plot.Clear();
                 formsPlot1.Refresh();
-
-                // --- ВОТ СЮДА ВСТАВЛЯЕМ! ---
-                // Теперь, когда данные загружены, считаем симметричные составляющие
-                // Результат появится на второй вкладке (Анализ ТКЗ)
-                VychislitSimmetrichnye();
-                // ---------------------------
             }
         }
     }
-    
 
-    // НОВОЕ: Событие, которое срабатывает при клике на галочку
-    private void clbSignals_ItemCheck(object sender, ItemCheckEventArgs e)
+    private void clbSignals_ItemCheck(object? sender, ItemCheckEventArgs e)
     {
-        // Используем BeginInvoke, чтобы график обновился ПОСЛЕ того, как галочка поставится
         BeginInvoke((MethodInvoker)delegate
         {
             OtrisovatVybrannye();
         });
     }
 
-    // НОВОЕ: Метод отрисовки только тех сигналов, где стоят галочки
     private void OtrisovatVybrannye()
     {
         if (currentRecord == null || currentRecord.Dannye.Count == 0) return;
@@ -91,10 +126,10 @@ public partial class Form1 : Form
         formsPlot1.Plot.Clear();
 
         System.Drawing.Color[] cveta = {
-        Color.Red, Color.Green, Color.Blue,
-        Color.Orange, Color.Purple, Color.Cyan,
-        Color.Magenta, Color.Brown
-    };
+            Color.Red, Color.Green, Color.Blue,
+            Color.Orange, Color.Purple, Color.Cyan,
+            Color.Magenta, Color.Brown
+        };
 
         int colorIdx = 0;
         bool estToki = false;
@@ -103,13 +138,12 @@ public partial class Form1 : Form
         foreach (int idx in clbSignals.CheckedIndices)
         {
             double[] yData = currentRecord.Dannye.Select(row => row[idx]).ToArray();
-
             var signal = formsPlot1.Plot.Add.Signal(yData);
             signal.Data.Period = currentRecord.ShagVremeni;
             signal.Color = ScottPlot.Color.FromColor(cveta[colorIdx % cveta.Length]);
 
             string edinicy = currentRecord.Kanaly[idx].Edinicy.ToUpper();
-            string name = PoluchitPonyatnoeImya(idx, currentRecord.Kanaly[idx].Nazvanie);
+            string name = PoluchitPonyatnoeImya(currentRecord.Kanaly[idx].Nazvanie, currentRecord.Kanaly[idx].Edinicy);
             signal.LegendText = $"{name} ({edinicy})";
 
             if (edinicy.Contains("V") || edinicy.Contains("В"))
@@ -125,139 +159,269 @@ public partial class Form1 : Form
             colorIdx++;
         }
 
-        // --- ФИКС МАСШТАБА (чтобы не отдалять вручную) ---
-
-        // 1. Считаем длительность
         double dlitelnost = currentRecord.Dannye.Count * currentRecord.ShagVremeni;
-        if (dlitelnost <= 0) dlitelnost = 1.0;
-
-        // 2. Вместо ZoomOut задаем постоянные отступы (0% по горизонтали, 10% по вертикали)
         formsPlot1.Plot.Axes.Margins(0, 0.1);
-
-        // 3. Устанавливаем границы времени (X)
         formsPlot1.Plot.Axes.SetLimitsX(0, dlitelnost);
-
-        // 4. Масштабируем только вертикаль (Y) — теперь с учетом Margins отступы будут фиксированными!
         formsPlot1.Plot.Axes.AutoScaleY();
 
-        // 4. Добавим небольшой отступ сверху и снизу (10%), чтобы пики не касались края
-        formsPlot1.Plot.Axes.ZoomOut(1.0, 1.1);
-
-        // Настройка видимости осей
         formsPlot1.Plot.Axes.Left.IsVisible = estToki;
-        formsPlot1.Plot.YLabel(estToki ? "Ток, А" : "");
+        formsPlot1.Plot.YLabel(estToki ? "Ток, А" : "", size: 24);
         formsPlot1.Plot.Axes.Right.IsVisible = estNapryazheniya;
         formsPlot1.Plot.Axes.Right.Label.Text = estNapryazheniya ? "Напряжение, В" : "";
+        formsPlot1.Plot.Axes.Right.Label.FontSize = 24; // Устанавливаем размер для правой оси
 
-        formsPlot1.Plot.Title("Осциллограмма выбранных сигналов");
-        formsPlot1.Plot.XLabel("Время, секунды");
+        formsPlot1.Plot.Title("Осциллограмма выбранных сигналов", size: 24);
+        formsPlot1.Plot.XLabel("Время, секунды", size: 24);
         formsPlot1.Plot.Legend.IsVisible = true;
-
+        formsPlot1.Plot.Legend.Alignment = Alignment.LowerLeft; // Переносим вниз-влево
+        formsPlot1.Plot.Legend.FontSize = 30; // Заодно держим размер, как договорились
         formsPlot1.Refresh();
+
     }
 
-    private string PoluchitPonyatnoeImya(int index, string originalnoeImya)
+    private string PoluchitPonyatnoeImya(string originalName, string unit)
     {
-        switch (index)
+        string name = originalName.ToUpper();
+        string u = unit.ToUpper();
+        string faza = "?";
+
+        // 1. ОПРЕДЕЛЯЕМ ФАЗУ
+        if (name.Contains("A")) faza = "A";
+        else if (name.Contains("B")) faza = "B";
+        else if (name.Contains("C")) faza = "C";
+
+        // 2. ЕСЛИ ЭТО НАПРЯЖЕНИЕ (V или В)
+        if (u.Contains("V") || u.Contains("В"))
         {
-            case 0: return "U шин (фаза А)";
-            case 1: return "U шин (фаза B)";
-            case 2: return "U шин (фаза C)";
-            case 3: return "U линии (фаза А)";
-            case 4: return "U линии (фаза B)";
-            case 5: return "U линии (фаза C)";
-            case 6: return "I линии нач. (фаза А)";
-            case 7: return "I линии нач. (фаза B)";
-            case 8: return "I линии нач. (фаза C)";
-            case 9: return "I линии кон. (фаза А)";
-            case 10: return "I линии кон. (фаза B)";
-            case 11: return "I линии кон. (фаза C)";
-            default: return originalnoeImya; // Если каналов больше 12, оставляем как есть
+            // Если в коде есть 0002 и НЕТ тире (значит не линия)
+            if (name.Contains("0002") && !name.Contains("-")) return $"U шин (фаза {faza})";
+            if (name.Contains("0003")) return $"U линии (фаза {faza})";
+            return $"Напряжение (фаза {faza})";
         }
+
+        // 3. ЕСЛИ ЭТО ТОК (A или А)
+        if (u.Contains("A") || u.Contains("А"))
+        {
+            // 0007 или наличие тире обычно говорит о токе линии
+            if (name.Contains("0007") || name.Contains("-"))
+            {
+                if (name.Contains("0007")) return $"I линии нач. (фаза {faza})";
+                if (name.Contains("0004")) return $"I линии кон. (фаза {faza})";
+                return $"I линии (фаза {faza})";
+            }
+            return $"Ток (фаза {faza})";
+        }
+
+        return originalName;
     }
 
-    private void Form1_Load(object sender, EventArgs e)
-    {
-
-    }
-
-    private void formsPlot1_Load(object sender, EventArgs e)
-    {
-
-    }
     private void VychislitSimmetrichnye()
     {
-        if (currentRecord == null || currentRecord.Dannye.Count < 200) return;
-
-        // 1. Параметры: 50 Гц, шаг времени из файла
-        int pointsPerPeriod = (int)(1.0 / (50 * currentRecord.ShagVremeni));
-        int totalPoints = currentRecord.Dannye.Count;
-
-        // Массивы для хранения результатов (модули векторов)
-        double[] i1_mag = new double[totalPoints - pointsPerPeriod];
-        double[] i2_mag = new double[totalPoints - pointsPerPeriod];
-        double[] i0_mag = new double[totalPoints - pointsPerPeriod];
-        double[] timeAxis = new double[totalPoints - pointsPerPeriod];
-
-        // Индексы фазных токов (7, 8, 9 каналы -> индексы 6, 7, 8)
-        int idxA = 6, idxB = 7, idxC = 8;
-
-        // 2. Цикл скользящего окна
-        for (int i = 0; i < totalPoints - pointsPerPeriod; i++)
+        // --- 1. ВАЛИДАЦИЯ (Защита от дурака) ---
+        if (currentRecord == null)
         {
-            // Выделяем массивы для Фурье
-            double[] sliceA = currentRecord.Dannye.Select(row => row[idxA]).Skip(i).Take(pointsPerPeriod).ToArray();
-            double[] sliceB = currentRecord.Dannye.Select(row => row[idxB]).Skip(i).Take(pointsPerPeriod).ToArray();
-            double[] sliceC = currentRecord.Dannye.Select(row => row[idxC]).Skip(i).Take(pointsPerPeriod).ToArray();
+            MessageBox.Show("Файл не загружен!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
 
-            // Получаем комплексные фазоры (используем наш класс Vychisleniya_RZA)
-            var fA = Vychisleniya_RZA.Garmonika(sliceA, 0, pointsPerPeriod);
-            var fB = Vychisleniya_RZA.Garmonika(sliceB, 0, pointsPerPeriod);
-            var fC = Vychisleniya_RZA.Garmonika(sliceC, 0, pointsPerPeriod);
+        // Считаем точки на период (20 мс) строго по шагу текущего файла
+        // Используем Round, чтобы не было "дрожания" из-за погрешности double
+        int pointsPerPeriod = (int)Math.Round(0.02 / currentRecord.ShagVremeni);
 
-            // Считаем последовательности
-            var (i0, i1, i2) = Vychisleniya_RZA.Simmetrichnye(fA, fB, fC);
+        if (currentRecord.Dannye.Count < pointsPerPeriod || pointsPerPeriod <= 0)
+        {
+            MessageBox.Show("Недостаточно данных для анализа (нужно минимум 20 мс).", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
 
-            // Записываем действующие значения (Magnitude / sqrt(2))
-            i1_mag[i] = i1.Magnitude / Math.Sqrt(2);
-            i2_mag[i] = i2.Magnitude / Math.Sqrt(2);
-            i0_mag[i] = i0.Magnitude / Math.Sqrt(2);
+        // --- 2. ДИНАМИЧЕСКИЙ ПОИСК ИНДЕКСОВ (Всеядность) ---
+        int idxUA = -1, idxUB = -1, idxUC = -1;
+        int idxIA = -1, idxIB = -1, idxIC = -1;
 
+        for (int i = 0; i < currentRecord.Kanaly.Count; i++)
+        {
+            var k = currentRecord.Kanaly[i];
+            // Прогоняем через нашу "умную" функцию и в верхний регистр
+            string name = PoluchitPonyatnoeImya(k.Nazvanie, k.Edinicy).ToUpper();
+
+            bool isU = name.Contains("U") || name.Contains("НАПР");
+            bool isI = name.Contains("I") || name.Contains("ТОК");
+
+            // Ищем фазу (латиница + кириллица)
+            if (isU)
+            {
+                if (name.Contains("A") || name.Contains("А")) idxUA = i;
+                if (name.Contains("B") || name.Contains("В")) idxUB = i;
+                if (name.Contains("C") || name.Contains("С")) idxUC = i;
+            }
+            if (isI)
+            {
+                if (name.Contains("A") || name.Contains("А")) idxIA = i;
+                if (name.Contains("B") || name.Contains("В")) idxIB = i;
+                if (name.Contains("C") || name.Contains("С")) idxIC = i;
+            }
+        }
+
+        // --- 3. ПОДГОТОВКА ДАННЫХ ---
+        int totalPoints = currentRecord.Dannye.Count;
+        int length = totalPoints - pointsPerPeriod;
+
+        // Результаты
+        double[] i1_mag = new double[length], i2_mag = new double[length], i0_mag = new double[length];
+        double[] u1_mag = new double[length], u0_mag = new double[length];
+        double[] timeAxis = new double[length];
+
+        // Вытягиваем сырые данные в плоские массивы (если индекс -1, массив будет из нулей)
+        double[] rawUA = idxUA != -1 ? currentRecord.Dannye.Select(r => r[idxUA]).ToArray() : new double[totalPoints];
+        double[] rawUB = idxUB != -1 ? currentRecord.Dannye.Select(r => r[idxUB]).ToArray() : new double[totalPoints];
+        double[] rawUC = idxUC != -1 ? currentRecord.Dannye.Select(r => r[idxUC]).ToArray() : new double[totalPoints];
+        double[] rawIA = idxIA != -1 ? currentRecord.Dannye.Select(r => r[idxIA]).ToArray() : new double[totalPoints];
+        double[] rawIB = idxIB != -1 ? currentRecord.Dannye.Select(r => r[idxIB]).ToArray() : new double[totalPoints];
+        double[] rawIC = idxIC != -1 ? currentRecord.Dannye.Select(r => r[idxIC]).ToArray() : new double[totalPoints];
+
+        // --- 4. ОСНОВНОЙ ЦИКЛ РАСЧЕТА ---
+        for (int i = 0; i < length; i++)
+        {
+            // Вырезаем окна по актуальному pointsPerPeriod
+            double[] sIA = rawIA.Skip(i).Take(pointsPerPeriod).ToArray();
+            double[] sIB = rawIB.Skip(i).Take(pointsPerPeriod).ToArray();
+            double[] sIC = rawIC.Skip(i).Take(pointsPerPeriod).ToArray();
+
+            // Считаем токи (Гармоника -> Симметричные)
+            var fIA = Vychisleniya_RZA.Garmonika(sIA, 0, pointsPerPeriod);
+            var fIB = Vychisleniya_RZA.Garmonika(sIB, 0, pointsPerPeriod);
+            var fIC = Vychisleniya_RZA.Garmonika(sIC, 0, pointsPerPeriod);
+            var resI = Vychisleniya_RZA.Simmetrichnye(fIA, fIB, fIC);
+
+            // Переводим в действующие значения (Magnitude / sqrt(2))
+            i1_mag[i] = resI.i1.Magnitude / Math.Sqrt(2);
+            i2_mag[i] = resI.i2.Magnitude / Math.Sqrt(2);
+            i0_mag[i] = resI.i0.Magnitude / Math.Sqrt(2);
+
+            // Вырезаем окна для напряжений
+            double[] sUA = rawUA.Skip(i).Take(pointsPerPeriod).ToArray();
+            double[] sUB = rawUB.Skip(i).Take(pointsPerPeriod).ToArray();
+            double[] sUC = rawUC.Skip(i).Take(pointsPerPeriod).ToArray();
+
+            var fUA = Vychisleniya_RZA.Garmonika(sUA, 0, pointsPerPeriod);
+            var fUB = Vychisleniya_RZA.Garmonika(sUB, 0, pointsPerPeriod);
+            var fUC = Vychisleniya_RZA.Garmonika(sUC, 0, pointsPerPeriod);
+            var resU = Vychisleniya_RZA.Simmetrichnye(fUA, fUB, fUC);
+
+            u1_mag[i] = resU.i1.Magnitude / Math.Sqrt(2);
+            u0_mag[i] = resU.i0.Magnitude / Math.Sqrt(2);
+
+            // Ось времени
             timeAxis[i] = i * currentRecord.ShagVremeni;
         }
 
-        // 3. Отрисовка на втором графике
-        OtrisovatAnaliz(timeAxis, i1_mag, i2_mag, i0_mag);
+        // 5. ОТРИСОВКА
+        OtrisovatAnaliz(timeAxis, i1_mag, i2_mag, i0_mag, u1_mag, u0_mag);
     }
-    private void OtrisovatAnaliz(double[] time, double[] i1, double[] i2, double[] i0)
+
+    private void OtrisovatAnaliz(double[] time, double[] i1, double[] i2, double[] i0, double[] u1, double[] u0)
     {
-        formsPlotAnalysis.Plot.Clear();
+        // 1. График ТОКОВ (Верхний)
+        formsPlotCurrents.Plot.Clear();
+        var sI1 = formsPlotCurrents.Plot.Add.Signal(i1);
+        sI1.Data.Period = currentRecord.ShagVremeni;
+        sI1.LegendText = "I1 (Прямая)";
+        sI1.Color = ScottPlot.Color.FromColor(Color.Red);
 
-        // Прямая последовательность - обычно красная
-        var sig1 = formsPlotAnalysis.Plot.Add.Signal(i1);
-        sig1.Data.Period = currentRecord.ShagVremeni;
-        sig1.LegendText = "I1 (Прямая)";
-        sig1.Color = ScottPlot.Color.FromColor(System.Drawing.Color.Red);
+        var sI2 = formsPlotCurrents.Plot.Add.Signal(i2);
+        sI2.Data.Period = currentRecord.ShagVremeni;
+        sI2.LegendText = "I2 (Обратная)";
+        sI2.Color = ScottPlot.Color.FromColor(Color.Blue);
 
-        // Обратная - синяя
-        var sig2 = formsPlotAnalysis.Plot.Add.Signal(i2);
-        sig2.Data.Period = currentRecord.ShagVremeni;
-        sig2.LegendText = "I2 (Обратная)";
-        sig2.Color = ScottPlot.Color.FromColor(System.Drawing.Color.Blue);
+        var sI0 = formsPlotCurrents.Plot.Add.Signal(i0);
+        sI0.Data.Period = currentRecord.ShagVremeni;
+        sI0.LegendText = "I0 (Нулевая)";
+        sI0.Color = ScottPlot.Color.FromColor(Color.Green);
 
-        // Нулевая - зеленая или черная
-        var sig0 = formsPlotAnalysis.Plot.Add.Signal(i0);
-        sig0.Data.Period = currentRecord.ShagVremeni;
-        sig0.LegendText = "I0 (Нулевая)";
-        sig0.Color = ScottPlot.Color.FromColor(System.Drawing.Color.Green);
+        formsPlotCurrents.Plot.Title("Симметричные составляющие ТОКА", size: 24);
+        formsPlotCurrents.Plot.YLabel("Ток, А", size: 24);
+        formsPlotCurrents.Plot.Legend.IsVisible = true;
+        formsPlotCurrents.Plot.Axes.AutoScale();
+        formsPlotCurrents.Plot.Legend.Alignment = Alignment.LowerLeft; // Сюда
+        formsPlotCurrents.Plot.Legend.FontSize = 30;
+        formsPlotCurrents.Refresh();
 
-        // Настройка осей
-        formsPlotAnalysis.Plot.Title("Симметричные составляющие тока");
-        formsPlotAnalysis.Plot.XLabel("Время, сек");
-        formsPlotAnalysis.Plot.YLabel("Действующее значение, А");
-        formsPlotAnalysis.Plot.Legend.IsVisible = true;
+        // 2. График НАПРЯЖЕНИЙ (Нижний)
+        formsPlotVoltages.Plot.Clear();
+        var sU1 = formsPlotVoltages.Plot.Add.Signal(u1);
+        sU1.Data.Period = currentRecord.ShagVremeni;
+        sU1.LegendText = "U1 (Прямая)";
+        sU1.Color = ScottPlot.Color.FromColor(Color.Red);
 
-        formsPlotAnalysis.Plot.Axes.AutoScale();
-        formsPlotAnalysis.Refresh();
+        var sU0 = formsPlotVoltages.Plot.Add.Signal(u0);
+        sU0.Data.Period = currentRecord.ShagVremeni;
+        sU0.LegendText = "U0 (Нулевая)";
+        sU0.Color = ScottPlot.Color.FromColor(Color.Green);
+
+        formsPlotVoltages.Plot.Title("Симметричные составляющие НАПРЯЖЕНИЯ", size: 24);
+        formsPlotVoltages.Plot.YLabel("Напряжение, В", size: 24);
+        formsPlotVoltages.Plot.XLabel("Время, сек", size: 24);
+        formsPlotVoltages.Plot.Legend.IsVisible = true;
+        formsPlotVoltages.Plot.Axes.AutoScale();
+        formsPlotVoltages.Plot.Legend.Alignment = Alignment.LowerLeft; // И сюда
+        formsPlotVoltages.Plot.Legend.FontSize = 30;
+        formsPlotVoltages.Refresh();
+    }
+
+    private void btnCalculate_Click(object sender, EventArgs e)
+    {
+        VychislitSimmetrichnye();
+    }
+
+    private void выполнитьРасчетТКЗToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        VychislitSimmetrichnye(); // Твой метод расчёта
+    }
+
+    private void btnSave_Click(object sender, EventArgs e)
+    {
+        // 1. Проверяем, есть ли что сохранять
+        if (currentRecord == null)
+        {
+            MessageBox.Show("Сначала откройте исходный файл!", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // 2. Смотрим, какие галочки стоят в списке
+        List<int> selected = new List<int>();
+        foreach (int index in clbSignals.CheckedIndices)
+        {
+            selected.Add(index);
+        }
+
+        if (selected.Count == 0)
+        {
+            MessageBox.Show("Выберите хотя бы один сигнал галочкой!", "Внимание", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        // 3. Открываем окно выбора пути
+        SaveFileDialog sfd = new SaveFileDialog();
+        sfd.Filter = "COMTRADE CFG (*.cfg)|*.cfg";
+        sfd.Title = "Сохранить выбранные сигналы";
+        sfd.FileName = "Result_Analysis"; // Имя по умолчанию
+
+        if (sfd.ShowDialog() == DialogResult.OK)
+        {
+            // Убираем лишние расширения из пути
+            string path = sfd.FileName.Replace(".cfg", "").Replace(".CFG", "");
+
+            try
+            {
+                // Магия нашего нового класса!
+                Zapis_COMTRADE.Sohranit(path, currentRecord, selected);
+
+                MessageBox.Show("Файлы .cfg и .dat успешно созданы!", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось сохранить: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 }
