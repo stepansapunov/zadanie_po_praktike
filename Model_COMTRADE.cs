@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Osnovnoi_proekt;
 
-// 1. Описание одного канала (остается без изменений)
+// Модель данных измерительного канала согласно спецификации COMTRADE
 public class Kanal_COMTRADE
 {
     public int Nomer { get; set; }
@@ -13,22 +13,25 @@ public class Kanal_COMTRADE
     public double Koeff_A { get; set; }
     public double Koeff_B { get; set; }
 
-    // Метод для пересчета "сырого" значения в реальное (Амперы/Вольты)
+    // Преобразование дискретного значения в первичную физическую величину (линейная аппроксимация)
     public double Preobrazovat(double syroeZnachenie)
     {
         return Koeff_A * syroeZnachenie + Koeff_B;
     }
 }
 
-// 2. Модель всей осциллограммы (ПЕРЕИМЕНОВАЛИ В Model_COMTRADE)
+// Объектная модель данных осциллограммы
 public class Model_COMTRADE
 {
-    // Добавим название станции, оно нам пригодится для отчета
+    // Идентификатор объекта (энергообъекта или станции)
     public string NazvanieStancii { get; set; } = string.Empty;
 
+    // Список описаний информационных каналов
     public List<Kanal_COMTRADE> Kanaly { get; set; } = new();
+
+    // Массив мгновенных значений векторов измерительных сигналов
     public List<double[]> Dannye { get; set; } = new();
 
-    // Шаг времени (1 делить на частоту дискретизации)
+    // Период дискретизации сигналов (интервал между выборками), сек
     public double ShagVremeni { get; set; } = 0.001;
 }

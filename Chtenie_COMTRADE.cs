@@ -11,80 +11,62 @@ public static class Chtenie_COMTRADE
     public static Model_COMTRADE Prochitat(string cfgPath, string datPath)
     {
         Model_COMTRADE record = new Model_COMTRADE();
-
-        // Читаем всё, убирая пустые строки в конце, чтобы не поймать ошибку
         string[] cfgLines = File.ReadAllLines(cfgPath).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
 
-        if (cfgLines.Length < 2) throw new Exception("Некорректный CFG файл");
-
-        // 1. Название станции (первая строка)
+        // Считывание идентификатора станции и общего количества информационных каналов
         record.NazvanieStancii = cfgLines[0].Split(',')[0];
+        string[] counts = cfgLines[1].Split(',');
+        int nAn = int.Parse(counts[1].Replace("A", "").Trim());
+        int nDig = counts.Length > 2 ? int.Parse(counts[2].Replace("D", "").Trim()) : 0;
 
-        // 2. Количество каналов (вторая строка)
-        string[] line2 = cfgLines[1].Split(',');
-        // Используем Trim(), чтобы убрать пробелы вокруг числа
-        int countAnalog = int.Parse(line2[1].Replace("A", "").Trim());
-
-        // 3. Читаем данные аналоговых каналов
-        for (int i = 0; i < countAnalog; i++)
+        // Итерация по списку каналов для извлечения параметров масштабирования и единиц измерения
+        for (int i = 0; i < nAn; i++)
         {
-            // Строки каналов начинаются с 3-й (индекс 2)
-            string[] chLine = cfgLines[i + 2].Split(',');
-
-            var kanal = new Kanal_COMTRADE
+            string[] L = cfgLines[i + 2].Split(',');
+            record.Kanaly.Add(new Kanal_COMTRADE
             {
-                Nomer = int.Parse(chLine[0].Trim()),
-                Nazvanie = chLine[1].Trim(),
-                Faza = chLine[2].Trim(), // Важно для поиска фаз А, B, C!
-                Edinicy = chLine[4].Trim(),
-                // Читаем коэффициенты масштабирования
-                Koeff_A = double.Parse(chLine[5].Trim(), CultureInfo.InvariantCulture),
-                Koeff_B = double.Parse(chLine[6].Trim(), CultureInfo.InvariantCulture)
-            };
-            record.Kanaly.Add(kanal);
+                Nazvanie = L[1].Trim(),
+                Edinicy = L[4].Trim(),
+                // Коэффициенты преобразования цифрового кода в первичную величину (Y = A*X + B)
+                Koeff_A = double.Parse(L[5].Trim(), CultureInfo.InvariantCulture),
+                Koeff_B = double.Parse(L[6].Trim(), CultureInfo.InvariantCulture)
+            });
         }
 
-        // 4. Частота и шаг времени (строка идет после всех каналов + еще 2 строки)
-        // Строка с частотой: 2 (шапка) + countAnalog + 2 (строка со статусом и еще одна)
-        int lineFrequency = 2 + countAnalog + 2;
-
-        if (cfgLines.Length > lineFrequency)
+        // Поиск параметров частоты дискретизации в структуре конфигурационного файла
+        record.ShagVremeni = 0.001; // Интервал дискретизации по умолчанию (1 мс)
+        for (int i = 2 + nAn + nDig; i < cfgLines.Length; i++)
         {
-            string[] freqLine = cfgLines[lineFrequency].Split(',');
-            if (double.TryParse(freqLine[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double freq) && freq > 0)
+            string[] parts = cfgLines[i].Split(',');
+            // Поиск строки, содержащей частоту выборки и общее количество отсчетов
+            if (parts.Length >= 2 && double.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double freq))
             {
-                // Твоя спец-формула (10.0 вместо 1.0)
-                record.ShagVremeni = 10.0 / freq;
+                if (freq > 100)
+                {
+                    // Расчет шага дискретизации (период опроса)
+                    record.ShagVremeni = 1.0 / freq;
+                    break;
+                }
             }
         }
 
-        // 5. Читаем .dat файл
+        // Парсинг файла данных (.dat) и восстановление мгновенных значений физических величин
         string[] datLines = File.ReadAllLines(datPath);
         foreach (string line in datLines)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-
-            // Разбиваем строку и убираем лишние пробелы у каждого элемента
-            string[] parts = line.Split(',').Select(p => p.Trim()).ToArray();
-
-            // В ASCII DAT файле: [0] - ID, [1] - время в мкс, [2...] - данные
+            string[] p = line.Split(',').Select(s => s.Trim()).ToArray();
             double[] row = new double[record.Kanaly.Count];
 
             for (int i = 0; i < record.Kanaly.Count; i++)
             {
-                if (parts.Length > i + 2)
-                {
-                    // Читаем сырое число с точкой
-                    if (double.TryParse(parts[i + 2], NumberStyles.Any, CultureInfo.InvariantCulture, out double raw))
-                    {
-                        // Масштабируем: результат = raw * A + B
-                        row[i] = record.Kanaly[i].Preobrazovat(raw);
-                    }
-                }
+                // Пропуск временной метки и номера пробы для получения доступа к отсчетам сигналов
+                if (p.Length > i + 2 && double.TryParse(p[i + 2], NumberStyles.Any, CultureInfo.InvariantCulture, out double raw))
+                    // Масштабирование сигнала согласно коэффициентам из CFG-файла
+                    row[i] = record.Kanaly[i].Preobrazovat(raw);
             }
             record.Dannye.Add(row);
         }
-
         return record;
     }
 }

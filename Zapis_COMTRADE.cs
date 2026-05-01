@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Globalization;
 
 namespace Osnovnoi_proekt;
+
+
+// Класс реализации экспорта данных в международный формат COMTRADE (стандарт IEEE C37.111-1999)
 
 public static class Zapis_COMTRADE
 {
@@ -13,41 +17,57 @@ public static class Zapis_COMTRADE
         string cfgPath = baseFilePath + ".cfg";
         string datPath = baseFilePath + ".dat";
 
-        // 1. ПИШЕМ CFG ФАЙЛ (Конфигурация)
+        // Формирование конфигурационного файла (.cfg)
         using (StreamWriter sw = new StreamWriter(cfgPath, false, Encoding.Default))
         {
-            sw.WriteLine($"{source.NazvanieStancii},CreatedByArtyom,1999");
-            // Указываем количество выбранных каналов (например, 3,3A,0D)
+            // Сведения о станции, идентификатор устройства и версия используемого стандарта
+            sw.WriteLine($"{source.NazvanieStancii}, Created_by_the_best_team, 1999");
+
+            // Информация о количестве измерительных каналов: общее число, аналоговые и цифровые (дискретные)
             sw.WriteLine($"{selectedIndices.Count},{selectedIndices.Count}A,0D");
 
             for (int i = 0; i < selectedIndices.Count; i++)
             {
                 var k = source.Kanaly[selectedIndices[i]];
-                // Записываем каналы по порядку 1, 2, 3...
-                sw.WriteLine($"{i + 1},{k.Nazvanie},,,{k.Edinicy},1,0,0,-32767,32767");
+                // Параметры информационного канала: индекс, имя, фаза, компонента, единицы измерения, 
+                // масштабирующие коэффициенты (A, B), временной сдвиг, минимальное и максимальное значения
+                sw.WriteLine($"{i + 1},{k.Nazvanie},{k.Faza},,{k.Edinicy},1.0,0.0,0.0,-32767,32767");
             }
 
-            sw.WriteLine("50");
-            sw.WriteLine("1");
-            sw.WriteLine($"{10.0 / source.ShagVremeni:F0},{source.Dannye.Count}");
-            sw.WriteLine("01/01/2026,00:00:00.000000");
-            sw.WriteLine("01/01/2026,00:00:01.000000");
-            sw.WriteLine("ASCII"); // Оставляем текстовый формат для удобства проверки
-            sw.WriteLine("1");
+            sw.WriteLine("50"); // Номинальная частота электрической сети, Гц
+            sw.WriteLine("1");  // Количество этапов дискретизации
+
+            // Расчет частоты дискретизации на основе шага времени и запись общего количества выборок
+            double freq = 1.0 / source.ShagVremeni;
+            sw.WriteLine($"{freq:F0},{source.Dannye.Count}");
+
+            // Метки даты и времени записи
+            // Используется текущее системное время с точностью до микросекунд
+            string currentTime = DateTime.Now.ToString("dd/MM/yyyy,HH:mm:ss.ffffff");
+
+            sw.WriteLine(currentTime); // Метка времени первой выборки
+            sw.WriteLine(currentTime); // Метка времени возникновения события (триггера)
+
+            sw.WriteLine("ASCII"); // Способ хранения данных (текстовый формат)
+            sw.WriteLine("1");     // Множитель временных меток
         }
 
-        // 2. ПИШЕМ DAT ФАЙЛ (Данные текстом)
+        // Формирование файла мгновенных значений (.dat)
         using (StreamWriter swDat = new StreamWriter(datPath, false, Encoding.Default))
         {
             for (int i = 0; i < source.Dannye.Count; i++)
             {
                 string sampleNum = (i + 1).ToString();
-                string timeUsec = (i * source.ShagVremeni * 1000000).ToString("F0");
 
-                // Выбираем из всей строки данных только те индексы, которые отметил пользователь
-                var values = selectedIndices.Select(idx => source.Dannye[i][idx].ToString("F3", System.Globalization.CultureInfo.InvariantCulture));
+                // Вычисление относительной временной метки выборки в микросекундах
+                double timeUsec = i * source.ShagVremeni * 1000000.0;
 
-                swDat.WriteLine($"{sampleNum},{timeUsec},{string.Join(",", values)}");
+                // Сериализация физических величин выбранных каналов в текстовую строку с разделителями
+                var values = selectedIndices.Select(idx =>
+                    source.Dannye[i][idx].ToString("F3", CultureInfo.InvariantCulture));
+
+                // Структура строки данных: номер пробы, время (мкс), значения сигналов
+                swDat.WriteLine($"{sampleNum},{timeUsec:F0},{string.Join(",", values)}");
             }
         }
     }
