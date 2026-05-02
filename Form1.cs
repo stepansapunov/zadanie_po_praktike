@@ -205,12 +205,12 @@ public partial class Form1 : Form
         string u = unit.Trim().ToUpper();
         string faza = "?";
 
-        // Определение фазной принадлежности канала на основе текстового анализа или порядкового индекса
+        // 1. ОПРЕДЕЛЯЕМ ФАЗУ
         if (name.Contains("A") || name.Contains("А")) faza = "A";
         else if (name.Contains("B") || name.Contains("В")) faza = "B";
         else if (name.Contains("C") || name.Contains("С")) faza = "C";
 
-        if (faza == "?")
+        if (faza == "?") // Если буквы нет в имени, определяем по порядку (0,1,2 -> A,B,C)
         {
             int f = (index % 3);
             if (f == 0) faza = "A";
@@ -218,32 +218,24 @@ public partial class Form1 : Form
             else if (f == 2) faza = "C";
         }
 
-        // Классификация цепей напряжения (шины станции / линейные цепи)
+        // 2. ЛОГИКА ДЛЯ НАПРЯЖЕНИЙ (V)
         if (u.Contains("V") || u.Contains("В"))
         {
-            if (name.Contains("US") || name.Contains("0002") || name.Contains("0001") || name.Contains("ШИН"))
+            if (name.Contains("US") || name.Contains("ШИН") || name.Contains("0001") || name.Contains("0002"))
                 return $"U шин (фаза {faza})";
 
-            if (name.Contains("UR") || name.Contains("0003") || name.Contains("ЛИНИИ"))
-                return $"U линии (фаза {faza})";
-
-            return $"Напряжение (фаза {faza})";
+            return $"U линии (фаза {faza})";
         }
 
-        // Классификация токовых цепей (начало и конец защищаемого участка линии)
+        // 3. ЛОГИКА ДЛЯ ТОКОВ (A)
         if (u.Contains("A") || u.Contains("А"))
         {
-            if (name.Contains("IR") || name.Contains("0004") || name.Contains("0005") || name.Contains("КОН") || (index >= 9 && index <= 11))
-            {
+            // Ищем маркеры конца линии
+            if (name.Contains("IR") || name.Contains("КОН") || name.Contains("0004") || name.Contains("0005"))
                 return $"I линии кон. (фаза {faza})";
-            }
 
-            if (name.Contains("IS") || name.Contains("0007") || name.Contains("0008") || name.Contains("НАЧ") || (index >= 6 && index <= 8))
-            {
-                return $"I линии нач. (фаза {faza})";
-            }
-
-            return $"Ток (фаза {faza})";
+            // По умолчанию считаем началом линии (самый частый случай)
+            return $"I линии нач. (фаза {faza})";
         }
 
         return originalName;
@@ -252,6 +244,7 @@ public partial class Form1 : Form
     // Метод комплексного анализа режима и расчета симметричных составляющих
     private void VychislitSimmetrichnye()
     {
+        // 0. ПРОВЕРКА: Загружен ли файл?
         if (currentRecord == null)
         {
             MessageBox.Show("Для проведения анализа сначала необходимо открыть файл COMTRADE!",
@@ -261,19 +254,24 @@ public partial class Form1 : Form
             return;
         }
 
-        // Группировка выбранных сигналов в связанные трехфазные системы
+        // 1. ГРУППИРУЕМ ВЫБРАННЫЕ КАНАЛЫ ПО ОБЪЕКТАМ
         var groups = new Dictionary<string, List<int>>();
 
         foreach (int i in clbSignals.CheckedIndices)
         {
-            string rawName = currentRecord.Kanaly[i].Nazvanie;
-            string groupName = rawName.Split('(', ',', '[')[0].Trim();
-            groupName = groupName.TrimEnd('A', 'B', 'C', 'А', 'В', 'С', ' ', '_', '.', '-');
+            // Вместо ручной обрезки имен используем нашу "умную" функцию.
+            // Она сама разберется, где начало, где конец линии, и какая там фаза.
+            string prettyName = PoluchitPonyatnoeImya(i, currentRecord.Kanaly[i].Nazvanie, currentRecord.Kanaly[i].Edinicy);
+
+            // Отрезаем часть с фазой: "I линии нач. (фаза A)" -> "I линии нач."
+            // Теперь группа будет называться одинаково для всех трёх фаз.
+            string groupName = prettyName.Split('(')[0].Trim();
 
             if (!groups.ContainsKey(groupName)) groups[groupName] = new List<int>();
             groups[groupName].Add(i);
         }
 
+        // 2. ПРОВЕРКА: Выбрано ли хоть что-нибудь?
         if (clbSignals.CheckedIndices.Count == 0)
         {
             MessageBox.Show("Пожалуйста, выберите сигналы галочками (минимум 3 фазы одного объекта) для проведения расчета.",
@@ -283,7 +281,7 @@ public partial class Form1 : Form
             return;
         }
 
-        // Валидация полноты данных для выполнения векторных расчетов
+        // --- Дальше идет твой блок валидации (uGroups, iGroups и т.д.) ---
         int uGroups = 0;
         int iGroups = 0;
         int idxUA = -1, idxUB = -1, idxUC = -1;
