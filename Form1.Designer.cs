@@ -39,11 +39,9 @@
             panel1 = new Panel();
             btnSave = new Button();
             btnOpen = new Button();
-            formsPlot1 = new ScottPlot.WinForms.FormsPlot();
-            tabPage2 = new TabPage();
-            splitContainer2 = new SplitContainer();
-            formsPlotCurrents = new ScottPlot.WinForms.FormsPlot();
-            formsPlotVoltages = new ScottPlot.WinForms.FormsPlot();
+            tableLayoutPanel1 = new TableLayoutPanel();
+            plotI = new ScottPlot.WinForms.FormsPlot();
+            plotU = new ScottPlot.WinForms.FormsPlot();
             tabControl1.SuspendLayout();
             tabPage1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)splitContainer1).BeginInit();
@@ -52,17 +50,12 @@
             splitContainer1.SuspendLayout();
             contextMenuStrip1.SuspendLayout();
             panel1.SuspendLayout();
-            tabPage2.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)splitContainer2).BeginInit();
-            splitContainer2.Panel1.SuspendLayout();
-            splitContainer2.Panel2.SuspendLayout();
-            splitContainer2.SuspendLayout();
+            tableLayoutPanel1.SuspendLayout();
             SuspendLayout();
             // 
             // tabControl1
             // 
             tabControl1.Controls.Add(tabPage1);
-            tabControl1.Controls.Add(tabPage2);
             tabControl1.Dock = DockStyle.Fill;
             tabControl1.Location = new Point(0, 0);
             tabControl1.Name = "tabControl1";
@@ -95,9 +88,9 @@
             // 
             // splitContainer1.Panel2
             // 
-            splitContainer1.Panel2.Controls.Add(formsPlot1);
+            splitContainer1.Panel2.Controls.Add(tableLayoutPanel1);
             splitContainer1.Size = new Size(2344, 847);
-            splitContainer1.SplitterDistance = 453;
+            splitContainer1.SplitterDistance = 510;
             splitContainer1.TabIndex = 0;
             // 
             // clbSignals
@@ -108,7 +101,7 @@
             clbSignals.FormattingEnabled = true;
             clbSignals.Location = new Point(0, 179);
             clbSignals.Name = "clbSignals";
-            clbSignals.Size = new Size(453, 0);
+            clbSignals.Size = new Size(510, 0);
             clbSignals.TabIndex = 13;
             // 
             // contextMenuStrip1
@@ -116,23 +109,23 @@
             contextMenuStrip1.ImageScalingSize = new Size(24, 24);
             contextMenuStrip1.Items.AddRange(new ToolStripItem[] { выполнитьРасчетТКЗToolStripMenuItem });
             contextMenuStrip1.Name = "contextMenuStrip1";
-            contextMenuStrip1.Size = new Size(267, 36);
+            contextMenuStrip1.Size = new Size(444, 36);
+            contextMenuStrip1.Opening += contextMenuStrip1_Opening;
             // 
             // выполнитьРасчетТКЗToolStripMenuItem
             // 
             выполнитьРасчетТКЗToolStripMenuItem.Name = "выполнитьРасчетТКЗToolStripMenuItem";
-            выполнитьРасчетТКЗToolStripMenuItem.Size = new Size(266, 32);
-            выполнитьРасчетТКЗToolStripMenuItem.Text = "Выполнить расчет ТКЗ";
+            выполнитьРасчетТКЗToolStripMenuItem.Size = new Size(443, 32);
+            выполнитьРасчетТКЗToolStripMenuItem.Text = "Выполнить расчет ТКЗ и построить графики";
             выполнитьРасчетТКЗToolStripMenuItem.Click += выполнитьРасчетТКЗToolStripMenuItem_Click;
             // 
             // txtInfo
             // 
-            txtInfo.ContextMenuStrip = contextMenuStrip1;
             txtInfo.Dock = DockStyle.Bottom;
-            txtInfo.Location = new Point(0, 135);
+            txtInfo.Location = new Point(0, 167);
             txtInfo.Multiline = true;
             txtInfo.Name = "txtInfo";
-            txtInfo.Size = new Size(453, 712);
+            txtInfo.Size = new Size(510, 680);
             txtInfo.TabIndex = 12;
             // 
             // panel1
@@ -142,12 +135,12 @@
             panel1.Dock = DockStyle.Top;
             panel1.Location = new Point(0, 0);
             panel1.Name = "panel1";
-            panel1.Size = new Size(453, 179);
+            panel1.Size = new Size(510, 179);
             panel1.TabIndex = 0;
             // 
             // btnSave
             // 
-            btnSave.Location = new Point(80, 71);
+            btnSave.Location = new Point(126, 90);
             btnSave.Name = "btnSave";
             btnSave.Size = new Size(276, 35);
             btnSave.TabIndex = 12;
@@ -157,7 +150,7 @@
             // 
             // btnOpen
             // 
-            btnOpen.Location = new Point(80, 19);
+            btnOpen.Location = new Point(126, 35);
             btnOpen.Name = "btnOpen";
             btnOpen.Size = new Size(276, 33);
             btnOpen.TabIndex = 11;
@@ -165,61 +158,37 @@
             btnOpen.UseVisualStyleBackColor = true;
             btnOpen.Click += btnOpen_Click_1;
             // 
-            // formsPlot1
+            // tableLayoutPanel1
             // 
-            formsPlot1.ContextMenuStrip = contextMenuStrip1;
-            formsPlot1.Dock = DockStyle.Fill;
-            formsPlot1.Location = new Point(0, 0);
-            formsPlot1.Name = "formsPlot1";
-            formsPlot1.Size = new Size(1887, 847);
-            formsPlot1.TabIndex = 10;
+            tableLayoutPanel1.ColumnCount = 1;
+            tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            tableLayoutPanel1.Controls.Add(plotI, 0, 0);
+            tableLayoutPanel1.Controls.Add(plotU, 0, 1);
+            tableLayoutPanel1.Dock = DockStyle.Fill;
+            tableLayoutPanel1.Location = new Point(0, 0);
+            tableLayoutPanel1.Name = "tableLayoutPanel1";
+            tableLayoutPanel1.Padding = new Padding(10);
+            tableLayoutPanel1.RowCount = 2;
+            tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            tableLayoutPanel1.Size = new Size(1830, 847);
+            tableLayoutPanel1.TabIndex = 0;
             // 
-            // tabPage2
+            // plotI
             // 
-            tabPage2.Controls.Add(splitContainer2);
-            tabPage2.Location = new Point(4, 34);
-            tabPage2.Name = "tabPage2";
-            tabPage2.Padding = new Padding(3);
-            tabPage2.Size = new Size(2350, 853);
-            tabPage2.TabIndex = 1;
-            tabPage2.Text = "Анализ ТКЗ";
-            tabPage2.UseVisualStyleBackColor = true;
+            plotI.Dock = DockStyle.Fill;
+            plotI.Location = new Point(13, 13);
+            plotI.Name = "plotI";
+            plotI.Size = new Size(1804, 407);
+            plotI.TabIndex = 0;
             // 
-            // splitContainer2
+            // plotU
             // 
-            splitContainer2.Dock = DockStyle.Fill;
-            splitContainer2.Location = new Point(3, 3);
-            splitContainer2.Name = "splitContainer2";
-            splitContainer2.Orientation = Orientation.Horizontal;
-            // 
-            // splitContainer2.Panel1
-            // 
-            splitContainer2.Panel1.Controls.Add(formsPlotCurrents);
-            // 
-            // splitContainer2.Panel2
-            // 
-            splitContainer2.Panel2.Controls.Add(formsPlotVoltages);
-            splitContainer2.Size = new Size(2344, 847);
-            splitContainer2.SplitterDistance = 430;
-            splitContainer2.TabIndex = 0;
-            // 
-            // formsPlotCurrents
-            // 
-            formsPlotCurrents.ContextMenuStrip = contextMenuStrip1;
-            formsPlotCurrents.Dock = DockStyle.Fill;
-            formsPlotCurrents.Location = new Point(0, 0);
-            formsPlotCurrents.Name = "formsPlotCurrents";
-            formsPlotCurrents.Size = new Size(2344, 430);
-            formsPlotCurrents.TabIndex = 0;
-            // 
-            // formsPlotVoltages
-            // 
-            formsPlotVoltages.ContextMenuStrip = contextMenuStrip1;
-            formsPlotVoltages.Dock = DockStyle.Fill;
-            formsPlotVoltages.Location = new Point(0, 0);
-            formsPlotVoltages.Name = "formsPlotVoltages";
-            formsPlotVoltages.Size = new Size(2344, 413);
-            formsPlotVoltages.TabIndex = 0;
+            plotU.Dock = DockStyle.Fill;
+            plotU.Location = new Point(13, 426);
+            plotU.Name = "plotU";
+            plotU.Size = new Size(1804, 408);
+            plotU.TabIndex = 1;
             // 
             // Form1
             // 
@@ -239,29 +208,23 @@
             splitContainer1.ResumeLayout(false);
             contextMenuStrip1.ResumeLayout(false);
             panel1.ResumeLayout(false);
-            tabPage2.ResumeLayout(false);
-            splitContainer2.Panel1.ResumeLayout(false);
-            splitContainer2.Panel2.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)splitContainer2).EndInit();
-            splitContainer2.ResumeLayout(false);
+            tableLayoutPanel1.ResumeLayout(false);
             ResumeLayout(false);
         }
 
         #endregion
         private TabControl tabControl1;
         private TabPage tabPage1;
-        private TabPage tabPage2;
         private SplitContainer splitContainer1;
-        private SplitContainer splitContainer2;
-        private ScottPlot.WinForms.FormsPlot formsPlotCurrents;
-        private ScottPlot.WinForms.FormsPlot formsPlotVoltages;
         private ContextMenuStrip contextMenuStrip1;
         private ToolStripMenuItem выполнитьРасчетТКЗToolStripMenuItem;
-        private ScottPlot.WinForms.FormsPlot formsPlot1;
         private Panel panel1;
         private CheckedListBox clbSignals;
         private TextBox txtInfo;
         private Button btnOpen;
         private Button btnSave;
+        private TableLayoutPanel tableLayoutPanel1;
+        private ScottPlot.WinForms.FormsPlot plotI;
+        private ScottPlot.WinForms.FormsPlot plotU;
     }
 }

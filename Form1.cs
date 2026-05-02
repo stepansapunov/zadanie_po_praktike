@@ -15,12 +15,34 @@ public partial class Form1 : Form
     // Объект текущей осциллограммы и путь к исходному конфигурационному файлу
     private Model_COMTRADE? currentRecord;
     private string? currentFilePath;
+    public enum TipOtcheta { Toki, Napryazheniya, VidKZ, Vse, Analiz }
 
     public Form1()
     {
         InitializeComponent();
-        // Регистрация обработчика события изменения состояния выбора сигналов
+
         clbSignals.ItemCheck += clbSignals_ItemCheck;
+
+        // --- НАСТРОЙКА КОНТЕКСТНОГО МЕНЮ (Пункт 2.5.5) ---
+        ContextMenuStrip menu = new ContextMenuStrip();
+
+        // ПУНКТ 1: Выполнить расчет ТКЗ (Самый быстрый путь - всё и сразу)
+        menu.Items.Add("Выполнить расчёт ТКЗ и построить графики", null, (s, e) => VychislitSimmetrichnye(TipOtcheta.Analiz));
+
+        // Добавляем разделитель для красоты
+        menu.Items.Add(new ToolStripSeparator());
+
+        // ПУНКТ 2: Выполнить обработку сигналов (Выпадающее меню для частных случаев)
+        var subMenu = new ToolStripMenuItem("Выполнить обработку сигналов");
+        subMenu.DropDownItems.Add("Рассчитать токи (I1, I2, I0)", null, (s, e) => VychislitSimmetrichnye(TipOtcheta.Toki));
+        subMenu.DropDownItems.Add("Рассчитать напряжения (U1, U0)", null, (s, e) => VychislitSimmetrichnye(TipOtcheta.Napryazheniya));
+        subMenu.DropDownItems.Add("Определить ударный ток и вид КЗ", null, (s, e) => VychislitSimmetrichnye(TipOtcheta.VidKZ));
+        subMenu.DropDownItems.Add("Вывести полный технический отчет", null, (s, e) => VychislitSimmetrichnye(TipOtcheta.Vse));
+
+        menu.Items.Add(subMenu);
+
+        // Привязываем всё это к списку сигналов
+        clbSignals.ContextMenuStrip = menu;
     }
 
     // Обработка выбора и загрузки файлов COMTRADE через диалоговое окно
@@ -69,58 +91,38 @@ public partial class Form1 : Form
                     }
                 }
 
-                // Формирование информационного отчета по параметрам загруженного файла
+                // Формирование краткого информационного отчета при загрузке файла
                 txtInfo.Clear();
-                txtInfo.AppendText($"=== ОТЧЕТ ПО ФАЙЛУ: {Path.GetFileName(cfgPath)} ===\r\n\r\n");
+                txtInfo.AppendText($"=== ФАЙЛ ЗАГРУЖЕН: {Path.GetFileName(cfgPath)} ===\r\n\r\n");
 
-                // Вычисление и вывод амплитудных (пиковых) параметров токовых цепей
-                if (tokiIdx.Count > 0)
+                // Выводим только общую статистику по каналам
+                if (tokiIdx.Count > 0 || napryazhIdx.Count > 0)
                 {
-                    double maxUdarnyi = currentRecord.Dannye.Max(row =>
-                        tokiIdx.Max(idx => Math.Abs(row[idx])));
-
-                    txtInfo.AppendText($"УДАРНЫЙ ТОК КЗ (i_уд): {maxUdarnyi:F2} А\r\n");
+                    txtInfo.AppendText($"Обнаружено каналов тока: {tokiIdx.Count}\r\n");
+                    txtInfo.AppendText($"Обнаружено каналов напряжения: {napryazhIdx.Count}\r\n");
                     txtInfo.AppendText("------------------------------------------\r\n");
-                    txtInfo.AppendText("ПИКОВЫЕ ЗНАЧЕНИЯ ТОКОВ:\r\n");
-
-                    foreach (int idx in tokiIdx)
-                    {
-                        var k = currentRecord.Kanaly[idx];
-                        string krasivoeImya = PoluchitPonyatnoeImya(idx, k.Nazvanie, k.Edinicy);
-                        double maxFaza = currentRecord.Dannye.Max(row => Math.Abs(row[idx]));
-                        txtInfo.AppendText($"{krasivoeImya}: {maxFaza,10:F2} {k.Edinicy}\r\n");
-                    }
+                    txtInfo.AppendText("ИНСТРУКЦИЯ:\r\n");
+                    txtInfo.AppendText("1. Отметьте галочками 3 фазы одного объекта.\r\n");
+                    txtInfo.AppendText("2. Нажмите правой кнопкой мыши на список сигналов.\r\n");
+                    txtInfo.AppendText("3. Выберите нужный вид обработки в меню.");
                 }
-
-                if (tokiIdx.Count > 0 && napryazhIdx.Count > 0) txtInfo.AppendText("\r\n");
-
-                // Вычисление и вывод амплитудных параметров цепей напряжения
-                if (napryazhIdx.Count > 0)
-                {
-                    txtInfo.AppendText("ПИКОВЫЕ ЗНАЧЕНИЯ НАПРЯЖЕНИЙ:\r\n");
-                    foreach (int idx in napryazhIdx)
-                    {
-                        var k = currentRecord.Kanaly[idx];
-                        string krasivoeImya = PoluchitPonyatnoeImya(idx, k.Nazvanie, k.Edinicy);
-                        double maxFaza = currentRecord.Dannye.Max(row => Math.Abs(row[idx]));
-                        txtInfo.AppendText($"{krasivoeImya}: {maxFaza,10:F2} {k.Edinicy}\r\n");
-                    }
-                }
-
-                if (tokiIdx.Count == 0 && napryazhIdx.Count == 0)
+                else
                 {
                     txtInfo.AppendText("ВНИМАНИЕ: Аналоговые каналы не распознаны.\r\n");
                 }
 
+                if (tokiIdx.Count > 0 && napryazhIdx.Count > 0) txtInfo.AppendText("\r\n");
+
+
+
                 // Сброс и очистка графических областей перед новой визуализацией
-                formsPlot1.Plot.Clear();
-                formsPlot1.Refresh();
+                plotI.Plot.Clear();
+                plotI.Refresh();
 
-                formsPlotCurrents.Plot.Clear();
-                formsPlotCurrents.Refresh();
-
-                formsPlotVoltages.Plot.Clear();
-                formsPlotVoltages.Refresh();
+                plotI.Plot.Clear();
+                plotU.Plot.Clear();
+                plotI.Refresh();
+                plotU.Refresh();
             }
         }
     }
@@ -139,63 +141,61 @@ public partial class Form1 : Form
     {
         if (currentRecord == null || currentRecord.Dannye.Count == 0) return;
 
-        formsPlot1.Plot.Clear();
+        // Очищаем оба графика по новым именам
+        plotI.Plot.Clear();
+        plotU.Plot.Clear();
 
-        // Цветовая палитра для дифференциации сигналов на графике
-        System.Drawing.Color[] cveta = {
-            Color.Red, Color.Green, Color.Blue,
-            Color.Orange, Color.Purple, Color.Cyan,
-            Color.Magenta, Color.Brown
-        };
-
+        Color[] cveta = { Color.Red, Color.Green, Color.Blue, Color.Orange, Color.Purple, Color.Cyan };
         int colorIdx = 0;
-        bool estToki = false;
-        bool estNapryazheniya = false;
 
         foreach (int idx in clbSignals.CheckedIndices)
         {
-            // Извлечение вектора значений для выбранного канала
+            var k = currentRecord.Kanaly[idx];
             double[] yData = currentRecord.Dannye.Select(row => row[idx]).ToArray();
-            var signal = formsPlot1.Plot.Add.Signal(yData);
+            string edinicy = k.Edinicy.ToUpper();
+
+            bool isVoltage = edinicy.Contains("V") || edinicy.Contains("В") || k.Nazvanie.ToUpper().StartsWith("U");
+
+            // Выбираем график: если напряжение — в plotU, иначе — в plotI
+            var targetPlot = isVoltage ? plotU : plotI;
+
+            var signal = targetPlot.Plot.Add.Signal(yData);
             signal.Data.Period = currentRecord.ShagVremeni;
             signal.Color = ScottPlot.Color.FromColor(cveta[colorIdx % cveta.Length]);
+            signal.LegendText = PoluchitPonyatnoeImya(idx, k.Nazvanie, k.Edinicy);
 
-            string edinicy = currentRecord.Kanaly[idx].Edinicy.ToUpper();
-            string name = PoluchitPonyatnoeImya(idx, currentRecord.Kanaly[idx].Nazvanie, currentRecord.Kanaly[idx].Edinicy);
-            signal.LegendText = $"{name} ({edinicy})";
-
-            // Распределение сигналов по осям ординат в зависимости от физической природы
-            if (edinicy.Contains("V") || edinicy.Contains("В"))
-            {
-                signal.Axes.YAxis = formsPlot1.Plot.Axes.Right;
-                estNapryazheniya = true;
-            }
-            else
-            {
-                signal.Axes.YAxis = formsPlot1.Plot.Axes.Left;
-                estToki = true;
-            }
             colorIdx++;
         }
 
-        // Настройка масштабирования и оформления координатных осей
-        double dlitelnost = currentRecord.Dannye.Count * currentRecord.ShagVremeni;
-        formsPlot1.Plot.Axes.Margins(0, 0.1);
-        formsPlot1.Plot.Axes.SetLimitsX(0, dlitelnost);
-        formsPlot1.Plot.Axes.AutoScaleY();
+        // Настройка внешнего вида
+        ConfigureMainPlot(plotI, "ОСЦИЛЛОГРАММА ТОКОВ", "Ток, А");
+        ConfigureMainPlot(plotU, "ОСЦИЛЛОГРАММА НАПРЯЖЕНИЙ", "Напряжение, В");
 
-        formsPlot1.Plot.Axes.Left.IsVisible = estToki;
-        formsPlot1.Plot.YLabel(estToki ? "Ток, А" : "", size: 24);
-        formsPlot1.Plot.Axes.Right.IsVisible = estNapryazheniya;
-        formsPlot1.Plot.Axes.Right.Label.Text = estNapryazheniya ? "Напряжение, В" : "";
-        formsPlot1.Plot.Axes.Right.Label.FontSize = 24;
+        // Включаем синхронизацию
+        SyncMainPlots();
+    }
 
-        formsPlot1.Plot.Title("Осциллограмма выбранных сигналов", size: 24);
-        formsPlot1.Plot.XLabel("Время, секунды", size: 24);
-        formsPlot1.Plot.Legend.IsVisible = true;
-        formsPlot1.Plot.Legend.Alignment = Alignment.LowerLeft;
-        formsPlot1.Plot.Legend.FontSize = 30;
-        formsPlot1.Refresh();
+    // Обновленный метод синхронизации под новые имена
+    private bool isSyncingMain = false;
+    private void SyncMainPlots()
+    {
+        var plots = new[] { plotI, plotU };
+        foreach (var master in plots)
+        {
+            master.Plot.RenderManager.AxisLimitsChanged += (s, e) =>
+            {
+                if (isSyncingMain) return;
+                isSyncingMain = true;
+                var limits = master.Plot.Axes.GetLimits();
+                foreach (var slave in plots)
+                {
+                    if (slave == master) continue;
+                    slave.Plot.Axes.SetLimitsX(limits.Left, limits.Right);
+                    slave.Refresh();
+                }
+                isSyncingMain = false;
+            };
+        }
     }
 
     // Алгоритм интерпретации технических наименований каналов в инженерную терминологию
@@ -242,70 +242,47 @@ public partial class Form1 : Form
     }
 
     // Метод комплексного анализа режима и расчета симметричных составляющих
-    private void VychislitSimmetrichnye()
+    private void VychislitSimmetrichnye(TipOtcheta tip = TipOtcheta.Vse)
     {
-        // 0. ПРОВЕРКА: Загружен ли файл?
+        // 1. Очистка и заголовок — теперь это происходит ВСЕГДА первым делом
+        txtInfo.Clear();
+        string fileName = (currentRecord != null) ? Path.GetFileName(currentFilePath ?? "Unknown.cfg") : "Файл не выбран";
+        txtInfo.AppendText($"=== ОТЧЕТ: {fileName} ===\r\n\r\n");
+
         if (currentRecord == null)
         {
-            MessageBox.Show("Для проведения анализа сначала необходимо открыть файл COMTRADE!",
-                            "Файл не загружен",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning);
+            txtInfo.AppendText("ОШИБКА: Сначала откройте файл COMTRADE!\r\n");
             return;
         }
 
-        // 1. ГРУППИРУЕМ ВЫБРАННЫЕ КАНАЛЫ ПО ОБЪЕКТАМ
-        var groups = new Dictionary<string, List<int>>();
+        if (clbSignals.CheckedIndices.Count == 0)
+        {
+            txtInfo.AppendText("ОШИБКА: Не выбраны сигналы (отметьте галочками фазы A, B, C).\r\n");
+            return;
+        }
 
+        // 2. ГРУППИРОВКА (Твоя надежная логика)
+        var groups = new Dictionary<string, List<int>>();
         foreach (int i in clbSignals.CheckedIndices)
         {
-            // Вместо ручной обрезки имен используем нашу "умную" функцию.
-            // Она сама разберется, где начало, где конец линии, и какая там фаза.
             string prettyName = PoluchitPonyatnoeImya(i, currentRecord.Kanaly[i].Nazvanie, currentRecord.Kanaly[i].Edinicy);
-
-            // Отрезаем часть с фазой: "I линии нач. (фаза A)" -> "I линии нач."
-            // Теперь группа будет называться одинаково для всех трёх фаз.
             string groupName = prettyName.Split('(')[0].Trim();
-
             if (!groups.ContainsKey(groupName)) groups[groupName] = new List<int>();
             groups[groupName].Add(i);
         }
 
-        // 2. ПРОВЕРКА: Выбрано ли хоть что-нибудь?
-        if (clbSignals.CheckedIndices.Count == 0)
-        {
-            MessageBox.Show("Пожалуйста, выберите сигналы галочками (минимум 3 фазы одного объекта) для проведения расчета.",
-                            "Ничего не выбрано",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-            return;
-        }
-
-        // --- Дальше идет твой блок валидации (uGroups, iGroups и т.д.) ---
-        int uGroups = 0;
-        int iGroups = 0;
+        int uGroups = 0, iGroups = 0;
         int idxUA = -1, idxUB = -1, idxUC = -1;
         int idxIA = -1, idxIB = -1, idxIC = -1;
 
         foreach (var g in groups)
         {
-            if (g.Value.Count != 3)
-            {
-                string displayName = clbSignals.Items[g.Value[0]].ToString();
-                string clearName = displayName.Split(':')[1].Split('(')[0].Trim();
-
-                MessageBox.Show($"Ошибка в объекте '{clearName}'!\n\n" +
-                                $"Для расчета симметричных составляющих нужно выбрать все три фазы (A, B, C).\n" +
-                                $"Сейчас для этого объекта выбрано фаз: {g.Value.Count}.",
-                                "Недостаточно данных",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Warning);
-                return;
-            }
+            if (g.Value.Count != 3) continue;
 
             int a = -1, b = -1, c = -1;
             foreach (int idx in g.Value)
             {
+                // Используем максимально широкий поиск фаз
                 string name = PoluchitPonyatnoeImya(idx, currentRecord.Kanaly[idx].Nazvanie, currentRecord.Kanaly[idx].Edinicy).ToUpper();
                 string faza = currentRecord.Kanaly[idx].Faza.ToUpper().Trim();
 
@@ -314,178 +291,165 @@ public partial class Form1 : Form
                 else if (name.Contains("ФАЗА C") || name.Contains("ФАЗА С") || faza == "C" || faza == "С") c = idx;
             }
 
-            if (a == -1 || b == -1 || c == -1)
-            {
-                MessageBox.Show($"В группе '{g.Key}' не удалось однозначно определить фазы A, B и C.\nПроверьте, что выбраны разные фазы одного объекта.",
-                                "Ошибка фазировки",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Warning);
-                return;
-            }
+            if (a == -1 || b == -1 || c == -1) continue;
 
             string unit = currentRecord.Kanaly[a].Edinicy.ToUpper();
-            if (unit.Contains("V") || unit.Contains("В")) { uGroups++; idxUA = a; idxUB = b; idxUC = c; }
-            else { iGroups++; idxIA = a; idxIB = b; idxIC = c; }
+            // Распознаем Напряжения по единицам (V, В) или имени (U)
+            if (unit.Contains("V") || unit.Contains("В") || currentRecord.Kanaly[a].Nazvanie.ToUpper().StartsWith("U"))
+            {
+                uGroups++; idxUA = a; idxUB = b; idxUC = c;
+            }
+            else
+            {
+                iGroups++; idxIA = a; idxIB = b; idxIC = c;
+            }
         }
 
         if (uGroups == 0 && iGroups == 0)
         {
-            MessageBox.Show("Не удалось найти полную группу из 3-х фаз (A, B, C). проверьте названия каналов!", "Ошибка");
+            txtInfo.AppendText("ОШИБКА: Не удалось собрать группу из 3-х фаз (A, B, C). Проверьте выбор каналов.\r\n");
             return;
         }
 
-        if (uGroups > 1 || iGroups > 1)
-        {
-            MessageBox.Show("Нельзя выбирать сразу две разные группы напряжений или токов.\n" +
-                            "Выберите три фазы только одного напряжения и/или три фазы только одного тока.", "Слишком много данных");
-            return;
-        }
-
-        // Основной вычислительный цикл анализа установившегося режима методом Фортескью
+        // 3. РАСЧЕТЫ
         int pointsPerPeriod = (int)Math.Round(0.02 / currentRecord.ShagVremeni);
-        int totalPoints = currentRecord.Dannye.Count;
-        int length = totalPoints - pointsPerPeriod;
-
+        int length = currentRecord.Dannye.Count - pointsPerPeriod;
         if (length <= 0) return;
 
         double[] i1 = new double[length], i2 = new double[length], i0 = new double[length];
         double[] u1 = new double[length], u0 = new double[length];
         double[] timeAxis = new double[length];
 
-        double[] rawUA = uGroups > 0 ? currentRecord.Dannye.Select(r => r[idxUA]).ToArray() : new double[totalPoints];
-        double[] rawUB = uGroups > 0 ? currentRecord.Dannye.Select(r => r[idxUB]).ToArray() : new double[totalPoints];
-        double[] rawUC = uGroups > 0 ? currentRecord.Dannye.Select(r => r[idxUC]).ToArray() : new double[totalPoints];
-        double[] rawIA = iGroups > 0 ? currentRecord.Dannye.Select(r => r[idxIA]).ToArray() : new double[totalPoints];
-        double[] rawIB = iGroups > 0 ? currentRecord.Dannye.Select(r => r[idxIB]).ToArray() : new double[totalPoints];
-        double[] rawIC = iGroups > 0 ? currentRecord.Dannye.Select(r => r[idxIC]).ToArray() : new double[totalPoints];
+        // Подготовка массивов (извлекаем данные один раз)
+        double[] rIA = idxIA != -1 ? currentRecord.Dannye.Select(r => r[idxIA]).ToArray() : new double[0];
+        double[] rIB = idxIB != -1 ? currentRecord.Dannye.Select(r => r[idxIB]).ToArray() : new double[0];
+        double[] rIC = idxIC != -1 ? currentRecord.Dannye.Select(r => r[idxIC]).ToArray() : new double[0];
+        double[] rUA = idxUA != -1 ? currentRecord.Dannye.Select(r => r[idxUA]).ToArray() : new double[0];
+        double[] rUB = idxUB != -1 ? currentRecord.Dannye.Select(r => r[idxUB]).ToArray() : new double[0];
+        double[] rUC = idxUC != -1 ? currentRecord.Dannye.Select(r => r[idxUC]).ToArray() : new double[0];
 
         for (int i = 0; i < length; i++)
         {
             if (iGroups > 0)
             {
-                var fA = Vychisleniya_RZA.Garmonika(rawIA.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod);
-                var fB = Vychisleniya_RZA.Garmonika(rawIB.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod);
-                var fC = Vychisleniya_RZA.Garmonika(rawIC.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod);
-                var res = Vychisleniya_RZA.Simmetrichnye(fA, fB, fC);
+                var res = Vychisleniya_RZA.Simmetrichnye(
+                    Vychisleniya_RZA.Garmonika(rIA.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod),
+                    Vychisleniya_RZA.Garmonika(rIB.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod),
+                    Vychisleniya_RZA.Garmonika(rIC.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod));
                 i1[i] = res.i1.Magnitude / Math.Sqrt(2);
                 i2[i] = res.i2.Magnitude / Math.Sqrt(2);
                 i0[i] = res.i0.Magnitude / Math.Sqrt(2);
             }
-
             if (uGroups > 0)
             {
-                var fA = Vychisleniya_RZA.Garmonika(rawUA.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod);
-                var fB = Vychisleniya_RZA.Garmonika(rawUB.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod);
-                var fC = Vychisleniya_RZA.Garmonika(rawUC.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod);
-                var res = Vychisleniya_RZA.Simmetrichnye(fA, fB, fC);
+                var res = Vychisleniya_RZA.Simmetrichnye(
+                    Vychisleniya_RZA.Garmonika(rUA.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod),
+                    Vychisleniya_RZA.Garmonika(rUB.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod),
+                    Vychisleniya_RZA.Garmonika(rUC.Skip(i).Take(pointsPerPeriod).ToArray(), 0, pointsPerPeriod));
                 u1[i] = res.i1.Magnitude / Math.Sqrt(2);
                 u0[i] = res.i0.Magnitude / Math.Sqrt(2);
             }
             timeAxis[i] = i * currentRecord.ShagVremeni;
         }
 
-        OtrisovatAnaliz(timeAxis, i1, i2, i0, u1, u0);
+        
 
-        // Генерация сводного технического отчета по результатам анализа ТКЗ
+        void PrintVidKZ()
+        {
+            if (iGroups > 0)
+            {
+                double[] s = { rIA.Max(), rIB.Max(), rIC.Max() }; Array.Sort(s);
+                string vid = "Не определен";
+                if (s[0] > s[2] * 0.65) vid = "К3 (Трехфазное симметричное)";
+                else if (i0.Max() > i1.Max() * 0.15) vid = (s[1] - s[0] > s[2] * 0.2) ? "К1-1 (Двухфазное на землю)" : "К1 (Однофазное на землю)";
+                else if (s[1] > s[2] * 0.4) vid = "К2 (Двухфазное)";
+                else vid = "К1 (Однофазное без земли)";
+
+                txtInfo.AppendText("=======================================\r\n");
+                txtInfo.AppendText($" АНАЛИЗ РЕЖИМА: {vid}\r\n");
+                txtInfo.AppendText($" УДАРНЫЙ ТОК (i_уд): {s[2],15:F2} A\r\n");
+                txtInfo.AppendText("=======================================\r\n");
+            }
+        }
+
+        void PrintToki()
+        {
+            txtInfo.AppendText("\r\n--- ПАРАМЕТРЫ ТОКА ---\r\n");
+            if (iGroups > 0)
+            {
+                txtInfo.AppendText($" Фаза A (пик): {rIA.Max(),15:F2} A\r\n");
+                txtInfo.AppendText($" Фаза B (пик): {rIB.Max(),15:F2} A\r\n");
+                txtInfo.AppendText($" Фаза C (пик): {rIC.Max(),15:F2} A\r\n");
+                txtInfo.AppendText("------------------------------------------\r\n");
+                txtInfo.AppendText($" I1 (прямая):  {i1.Max(),15:F2} A\r\n");
+                txtInfo.AppendText($" I2 (обратная): {i2.Max(),15:F2} A\r\n");
+                txtInfo.AppendText($" I0 (нулевая):  {i0.Max(),15:F2} A\r\n");
+            }
+            else
+            {
+                txtInfo.AppendText(" [!] Токовые сигналы не выбраны.\r\n");
+            }
+        }
+
+        void PrintU()
+        {
+            txtInfo.AppendText("\r\n--- ПАРАМЕТРЫ НАПРЯЖЕНИЯ ---\r\n");
+            if (uGroups > 0)
+            {
+                txtInfo.AppendText($" Фаза A (пик): {rUA.Max(),15:F2} V\r\n");
+                txtInfo.AppendText($" Фаза B (пик): {rUB.Max(),15:F2} V\r\n");
+                txtInfo.AppendText($" Фаза C (пик): {rUC.Max(),15:F2} V\r\n");
+                txtInfo.AppendText("------------------------------------------\r\n");
+                txtInfo.AppendText($" U1 (прямая):  {u1.Max(),15:F2} V\r\n");
+                txtInfo.AppendText($" U0 (нулевая):  {u0.Max(),15:F2} V\r\n");
+            }
+            else
+            {
+                txtInfo.AppendText(" [!] Сигналы напряжения не выбраны.\r\n");
+            }
+        }
+
+        // 3. ФОРМИРОВАНИЕ ИТОГОВОГО ТЕКСТА
         txtInfo.Clear();
-        string fileName = System.IO.Path.GetFileName(currentFilePath ?? "Unknown.cfg");
-        txtInfo.AppendText($"=== ОТЧЕТ ПО ФАЙЛУ: {fileName} ===\r\n\r\n");
+        txtInfo.AppendText($"ОТЧЕТ ПО ФАЙЛУ: {Path.GetFileName(currentFilePath)}\r\n");
 
-        if (iGroups > 0)
+        if (tip == TipOtcheta.Toki)
+            PrintToki();
+        else if (tip == TipOtcheta.Napryazheniya)
+            PrintU();
+        else if (tip == TipOtcheta.VidKZ)
+            PrintVidKZ();
+        // Добавляем проверку для Analiz, чтобы он выводил полный текст так же, как Vse
+        else if (tip == TipOtcheta.Vse || tip == TipOtcheta.Analiz)
         {
-            double i_ud = Math.Max(rawIA.Max(), Math.Max(rawIB.Max(), rawIC.Max()));
-            txtInfo.AppendText($"УДАРНЫЙ ТОК КЗ (i_уд): {i_ud:F2} A\r\n");
-            txtInfo.AppendText("------------------------------------------\r\n");
-            txtInfo.AppendText("ПИКОВЫЕ ЗНАЧЕНИЯ ВЫБРАННЫХ ФАЗ:\r\n");
-            txtInfo.AppendText($"Ток A: {rawIA.Max(),10:F2} A\r\n");
-            txtInfo.AppendText($"Ток B: {rawIB.Max(),10:F2} A\r\n");
-            txtInfo.AppendText($"Ток C: {rawIC.Max(),10:F2} A\r\n");
+            PrintVidKZ();
+            PrintToki();
+            PrintU();
+
+            if (iGroups == 0 || uGroups == 0)
+            {
+                txtInfo.AppendText("\r\nПримечание: Для полного анализа выберите фазы A, B, C одного объекта и повторите расчет.\r\n");
+            }
         }
 
-        if (iGroups > 0 && uGroups > 0) txtInfo.AppendText("\r\n");
-
-        if (uGroups > 0)
+        // Эта часть у тебя уже на месте, она отвечает за открытие окна
+        if (tip == TipOtcheta.Analiz && (iGroups > 0 || uGroups > 0))
         {
-            txtInfo.AppendText($"Напр A: {rawUA.Max(),10:F2} V\r\n");
-            txtInfo.AppendText($"Напр B: {rawUB.Max(),10:F2} V\r\n");
-            txtInfo.AppendText($"Напр C: {rawUC.Max(),10:F2} V\r\n");
-        }
 
-        txtInfo.AppendText("\r\n РАСЧЕТ ПОСЛЕДОВАТЕЛЬНОСТЕЙ \r\n");
-        if (iGroups > 0)
-        {
-            txtInfo.AppendText($"I1 (прямая) max:   {i1.Max(),10:F2} A\r\n");
-            txtInfo.AppendText($"I2 (обратная) max: {i2.Max(),10:F2} A\r\n");
-            txtInfo.AppendText($"I0 (нулевая) max:  {i0.Max(),10:F2} A\r\n");
+            var analysisWindow = new FormAnalysis(timeAxis, rIA, rIB, rIC, i1, i2, i0, rUA, rUB, rUC, u1, u0);
+            analysisWindow.Show();
         }
-
-        if (iGroups > 0 && uGroups > 0) txtInfo.AppendText("\r\n");
-
-        if (uGroups > 0)
-        {
-            txtInfo.AppendText($"U1 (прямая) max:   {u1.Max(),10:F2} V\r\n");
-            txtInfo.AppendText($"U0 (нулевая) max:  {u0.Max(),10:F2} V\r\n");
-        }
-        txtInfo.AppendText("\r\n");
     }
 
-    // Визуализация временных диаграмм симметричных составляющих токов и напряжений
-    private void OtrisovatAnaliz(double[] time, double[] i1, double[] i2, double[] i0, double[] u1, double[] u0)
-    {
-        formsPlotCurrents.Plot.Clear();
-        var sI1 = formsPlotCurrents.Plot.Add.Signal(i1);
-        sI1.Data.Period = currentRecord.ShagVremeni;
-        sI1.LegendText = "I1 (Прямая)";
-        sI1.Color = ScottPlot.Color.FromColor(Color.Red);
-
-        var sI2 = formsPlotCurrents.Plot.Add.Signal(i2);
-        sI2.Data.Period = currentRecord.ShagVremeni;
-        sI2.LegendText = "I2 (Обратная)";
-        sI2.Color = ScottPlot.Color.FromColor(Color.Blue);
-
-        var sI0 = formsPlotCurrents.Plot.Add.Signal(i0);
-        sI0.Data.Period = currentRecord.ShagVremeni;
-        sI0.LegendText = "I0 (Нулевая)";
-        sI0.Color = ScottPlot.Color.FromColor(Color.Green);
-
-        formsPlotCurrents.Plot.Title("Симметричные составляющие ТОКА", size: 24);
-        formsPlotCurrents.Plot.YLabel("Ток, А", size: 24);
-        formsPlotCurrents.Plot.Legend.IsVisible = true;
-        formsPlotCurrents.Plot.Axes.AutoScale();
-        formsPlotCurrents.Plot.Legend.Alignment = Alignment.LowerLeft;
-        formsPlotCurrents.Plot.Legend.FontSize = 30;
-        formsPlotCurrents.Refresh();
-
-        formsPlotVoltages.Plot.Clear();
-        var sU1 = formsPlotVoltages.Plot.Add.Signal(u1);
-        sU1.Data.Period = currentRecord.ShagVremeni;
-        sU1.LegendText = "U1 (Прямая)";
-        sU1.Color = ScottPlot.Color.FromColor(Color.Red);
-
-        var sU0 = formsPlotVoltages.Plot.Add.Signal(u0);
-        sU0.Data.Period = currentRecord.ShagVremeni;
-        sU0.LegendText = "U0 (Нулевая)";
-        sU0.Color = ScottPlot.Color.FromColor(Color.Green);
-
-        formsPlotVoltages.Plot.Title("Симметричные составляющие НАПРЯЖЕНИЯ", size: 24);
-        formsPlotVoltages.Plot.YLabel("Напряжение, В", size: 24);
-        formsPlotVoltages.Plot.XLabel("Время, сек", size: 24);
-        formsPlotVoltages.Plot.Legend.IsVisible = true;
-        formsPlotVoltages.Plot.Axes.AutoScale();
-        formsPlotVoltages.Plot.Legend.Alignment = Alignment.LowerLeft;
-        formsPlotVoltages.Plot.Legend.FontSize = 30;
-        formsPlotVoltages.Refresh();
-    }
+    
 
     private void btnCalculate_Click(object sender, EventArgs e)
     {
         VychislitSimmetrichnye();
     }
 
-    private void выполнитьРасчетТКЗToolStripMenuItem_Click(object sender, EventArgs e)
-    {
-        VychislitSimmetrichnye();
-    }
+
+
 
     // Сохранение выбранной области данных в новый файл формата COMTRADE
     private void btnSave_Click(object sender, EventArgs e)
@@ -527,5 +491,33 @@ public partial class Form1 : Form
                 MessageBox.Show($"Не удалось сохранить: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+    }
+
+    private void contextMenuStrip1_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+
+    }
+
+    private void выполнитьРасчетТКЗToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        VychislitSimmetrichnye(TipOtcheta.Analiz);
+    }
+
+    private void ConfigureMainPlot(ScottPlot.WinForms.FormsPlot fp, string title, string yLabel)
+    {
+        var plt = fp.Plot;
+        plt.Title(title, size: 20);
+        plt.YLabel(yLabel, size: 16);
+        plt.XLabel("Время, секунды", size: 16);
+
+        // Убираем пустые места по бокам
+        plt.Axes.Margins(0, 0.1);
+
+        // Настраиваем легенду (список сигналов)
+        plt.Legend.IsVisible = true;
+        plt.Legend.Alignment = Alignment.UpperRight;
+        plt.Legend.FontSize = 14;
+
+        fp.Refresh();
     }
 }
